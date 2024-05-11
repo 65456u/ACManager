@@ -1,5 +1,7 @@
 import sqlite3
 
+from .settings import Settings
+
 
 class ACMDatabase:
     def __init__(self):
@@ -20,12 +22,12 @@ class ACMDatabase:
     def turn_off_ac(self, room_id):
         pass
 
-    def set_ac(self, room_id, settings):
+    def set_ac(self, room_id, settings: Settings):
         pass
 
     def checkout(self, user_id):
         pass
-    
+
     def _create_tables(self):
         create_user_table_query = r"""
         CREATE TABLE IF NOT EXISTS users (
