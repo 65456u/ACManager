@@ -7,6 +7,16 @@ app = FastAPI()
 manager = Manager()
 
 
+@app.get("/")
+async def root():
+    return {"message": "Hello World"}
+
+
+@app.get("/hello/{name}")
+async def say_hello(name: str):
+    return {"message": f"Hello {name}"}
+
+
 @app.post("/user/register", response_model = UserRegisterResponse)
 async def register_user(user_request: UserRegisterRequest):
     # 将用户注册逻辑放在这里，包括密码哈希等操作
@@ -77,7 +87,9 @@ def get_ac_status(room_query_request: RoomRequest):
     return {"status": True, "settings": Settings(temperature = 25, fan_speed = "High", mode = "Cool")}
 
 
-@app.get("/ac/reports", response_model = ReportResponse)
-def get_reports():
-    return {"reports": [
-        ReportItem(room_id = 1, status = 1, settings = Settings(temperature = 25, fan_speed = "High", mode = "Cool"))]}
+@app.get("/ac/reports", response_model = List[ReportItem])
+def get_report_item():
+    return [
+        ReportItem(room_id = 1, status = 1, settings = Settings(temperature = 25, fan_speed = "High", mode = "Cool")),
+        ReportItem(room_id = 2, status = 0, settings = Settings(temperature = 25, fan_speed = "High", mode = "Cool"))
+    ]

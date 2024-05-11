@@ -32,7 +32,7 @@ class ReportItem(BaseModel):
 
 
 class ReportResponse(BaseModel):
-    reports: List[Invoice]
+    reports: List[ReportItem]
 
 
 class CheckoutRequest(BaseModel):

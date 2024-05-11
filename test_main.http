@@ -9,3 +9,83 @@ GET http://127.0.0.1:8000/hello/User
 Accept: application/json
 
 ###
+
+### User Register Endpoint ###
+POST http://localhost:8000/user/register
+Content-Type: application/json
+
+{
+  "name": "fuck",
+  "phone": "123456",
+  "password": "abc"
+}
+
+### Check-In Endpoint ###
+POST http://localhost:8000/checkin
+Content-Type: application/json
+
+{
+  "user_id": "123456789"
+}
+
+### Check-Out Endpoint ###
+POST http://localhost:8000/checkout
+Content-Type: application/json
+
+{
+  "user_id": "123456789"
+}
+
+### Turn On AC Endpoint ###
+POST http://localhost:8000/ac/on
+Content-Type: application/json
+
+{
+  "room_id": 1
+}
+
+### Turn Off AC Endpoint ###
+POST http://localhost:8000/ac/off
+Content-Type: application/json
+
+{
+  "room_id": 1
+}
+
+### Set AC Settings Endpoint ###
+POST http://localhost:8000/ac/settings
+Content-Type: application/json
+
+{
+  "room_id": 1,
+  "settings": {
+    "temperature": 25,
+    "fan_speed": "High",
+    "mode": "Cool"
+  }
+}
+
+### Get Room Cost Endpoint ###
+POST http://localhost:8000/ac/cost
+Content-Type: application/json
+
+{
+  "room_id": 1
+}
+
+### Get AC Status Endpoint ###
+GET http://localhost:8000/ac/status
+Content-Type: application/json
+
+{
+  "room_id": 1
+}
+
+### Get Reports Endpoint ###
+GET http://localhost:8000/ac/reports
+Content-Type: application/json
+
+{
+  "room_id": 1
+}
+
