@@ -12,20 +12,21 @@ MIN_ROOM_COUNT = 50
 
 
 class Manager:
-    def __init__(self, room_count = 100):
+    def __init__(self, room_count=100):
         self.db = ACMDatabase()
         self.conn = self.db.get_connection()
         self._create_tables()
         self.init_rooms()
 
-    def register_user(self, username, phone, password, role):
+    def register_user(self, username, phone, password):
         c = self.conn.cursor()
         # Generate a new salt
         salt = bcrypt.gensalt()
         # Hash the password with the generated salt
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
         # Insert user into the database and get the user id
-        insert_query = "INSERT INTO users (username, password, salt, phone, role) VALUES (?, ?, ?, ?, ?)"
+        insert_query = "INSERT INTO users (username, password, salt, phone,role) VALUES (?, ?, ?, ?,?)"
+        role = 1
         values = (username, hashed_password.decode('utf-8'), salt.decode('utf-8'), phone, role)
         try:
             c.execute(insert_query, values)
@@ -42,6 +43,7 @@ class Manager:
         values = (username,)
         c.execute(query, values)
         user = c.fetchone()
+        print(user)
         if user is None:
             return 0, 0
         user_id, hashed_password, salt, role = user
@@ -50,10 +52,12 @@ class Manager:
         # get room_id from rooms
         query = "SELECT id FROM rooms WHERE user_id = ?"
         c.execute(query, (user_id,))
-        room_id = c.fetchone()[0]
+        room_id = c.fetchone()
         if room_id is None:
             room_id = -1
-        return role, room_id
+        else:
+            room_id = room_id[0]
+        return role, room_id, user_id
 
     def checkin(self, user_id):
         c = self.conn.cursor()
@@ -123,8 +127,9 @@ class Manager:
         get_time_query = "SELECT datetime('now')"
         c.execute(get_time_query)
         end_time = c.fetchone()[0]
-        cost = calculate_cost(start_time, end_time, temperature, fan_speed, mode)
-        total_cost += cost
+        if ac_on == 1:
+            cost = calculate_cost(start_time, end_time, temperature, fan_speed, mode)
+            total_cost += cost
         return total_cost
 
     def checkout(self, user_id):
@@ -144,7 +149,7 @@ class Manager:
         query = "SELECT start_time FROM rooms WHERE user_id = ?"
         c.execute(query, values)
         # get the last record
-        start_time = c.fetchone()[0]
+        # start_time = c.fetchone()[0]
         # get records from ac_usage_record
         # get_records_query = "SELECT * FROM ac_usage_record WHERE user_id = ?"
         # c.execute(get_records_query, values)
@@ -162,6 +167,11 @@ class Manager:
         total_cost, invoices = self.generate_bill(user_id)
         delete_user_record_query = "DELETE FROM user_record WHERE user_id = ?"
         c.execute(delete_user_record_query, values)
+
+        # update the room
+        update_room_query = "UPDATE rooms SET busy = 0, user_id = -1, start_time = '', ac_on = 0 WHERE user_id = ?"
+        c.execute(update_room_query, values)
+        self.conn.commit()
         return total_cost, invoices
 
     def turn_on_ac(self, room_id):
@@ -172,11 +182,11 @@ class Manager:
         c.execute(query, values)
         room = c.fetchone()
         if room is None or room[0] == 0:
-            return -1
+            return -1, invalid_ac_setting
         busy, ac_on, start_time, temperature, fan_speed, mode = room
         if ac_on == 1:
-            return -2
-        settings = Settings(temperature = temperature, fan_speed = fan_speed, mode = mode)
+            return -2, invalid_ac_setting
+        settings = Settings(temperature=temperature, fan_speed=fan_speed, mode=mode)
         # get current time
         get_time_query = "SELECT datetime('now')"
         c.execute(get_time_query)
@@ -215,7 +225,7 @@ class Manager:
         values = (room_id,)
         c.execute(update_room_query, values)
         self.conn.commit()
-        settings = Settings(temperature = temperature, fan_speed = fan_speed, mode = mode)
+        settings = Settings(temperature=temperature, fan_speed=fan_speed, mode=mode)
         return 0, settings
 
     def set_ac(self, room_id, settings: Settings):
@@ -233,11 +243,22 @@ class Manager:
         # get current time
         get_time_query = "SELECT datetime('now')"
         c.execute(get_time_query)
-        start_time = c.fetchone()[0]
+        current_time = c.fetchone()[0]
+        # get the previous setting
+        query = "SELECT id, user_id,start_time, temperature, fan_speed, mode FROM rooms WHERE id = ?"
+        c.execute(query, values)
+        room = c.fetchone()
+        if room is None:
+            return -3, invalid_ac_setting
+        room_id, user_id, start_time, temperature, fan_speed, mode = room
+        # insert the record
+        self.insert_ac_usage_record(user_id, room_id, start_time, current_time, temperature, fan_speed, mode,
+                                    calculate_cost(start_time, current_time, temperature, fan_speed, mode))
         # update the room
         update_room_query = "UPDATE rooms SET temperature = ?, fan_speed = ?, mode = ? WHERE id = ?"
         values = (settings.temperature, settings.fan_speed, settings.mode, room_id)
         c.execute(update_room_query, values)
+
         self.conn.commit()
         return 0, settings
 
@@ -252,11 +273,11 @@ class Manager:
         if room is None:
             return None
         busy, ac_on, user_id, start_time, temperature, fan_speed, mode = room
-        settings = Settings(temperature = temperature, fan_speed = fan_speed, mode = mode)
+        settings = Settings(temperature=temperature, fan_speed=fan_speed, mode=mode)
         return busy, ac_on, user_id, start_time, settings
 
     # 查询统计报表，统计房间的使用详单
-    def generate_report(self, room_id):
+    def generate_report(self):
         c = self.conn.cursor()
         # # 查询房间的空调使用记录，并计算总消费
         # query = r"""
@@ -267,16 +288,15 @@ class Manager:
         # 查询房间的空调使用记录
         query = r"""
         SELECT user_id, room_id, start_time, end_time, temperature, fan_speed, mode, cost
-        FROM ac_usage_record
-        WHERE room_id = ?"""
-        c.execute(query, (room_id,))
+        FROM ac_usage_record"""
+        c.execute(query)
         usage_records = c.fetchall()
         report_items = []
         for record in usage_records:
             user_id, room_id, start_time, end_time, temperature, fan_speed, mode, cost = record
-            settings = Settings(temperature = temperature, fan_speed = fan_speed, mode = mode)
-            report_item = ReportItem(room_id = room_id, user_id = user_id, start_time = start_time, end_time = end_time,
-                                     cost = cost, settings = settings)
+            settings = Settings(temperature=temperature, fan_speed=fan_speed, mode=mode)
+            report_item = ReportItem(room_id=room_id, user_id=user_id, start_time=start_time, end_time=end_time,
+                                     cost=cost, settings=settings)
             report_items.append(report_item)
         return report_items
 
@@ -300,7 +320,10 @@ class Manager:
 
         values = (user_id,)
         c.execute(query, values)
-        in_time = c.fetchone()[0]
+        in_time = c.fetchone()
+        if in_time is None:
+            return 0, []
+        in_time = in_time[0]
         print(in_time)
         # only return records after the user checkin time
         invoices = []
@@ -309,9 +332,9 @@ class Manager:
             room_id, start_time, end_time, temperature, fan_speed, mode, cost = bill_item
             if start_time < in_time:
                 continue
-            settings = Settings(temperature = temperature, fan_speed = fan_speed, mode = mode)
-            invoice = Invoice(room_id = room_id, start_time = start_time, end_time = end_time, settings = settings,
-                              cost = cost)
+            settings = Settings(temperature=temperature, fan_speed=fan_speed, mode=mode)
+            invoice = Invoice(room_id=room_id, start_time=start_time, end_time=end_time, settings=settings,
+                              cost=cost)
             invoices.append(invoice)
             total_cost += cost
         return total_cost, invoices
@@ -398,3 +421,12 @@ class Manager:
         room_count = c.fetchone()[0]
         if room_count < MIN_ROOM_COUNT:
             self.add_rooms(MIN_ROOM_COUNT - room_count)
+
+    def get_user_id_by_name(self, username):
+        c = self.conn.cursor()
+        query = "SELECT id FROM users WHERE username = ?"
+        c.execute(query, (username,))
+        user_id = c.fetchone()
+        if user_id is None:
+            return -1
+        return user_id[0]

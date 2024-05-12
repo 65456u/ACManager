@@ -17,8 +17,7 @@ Content-Type: application/json
 {
   "name": "fuck",
   "phone": "123456",
-  "password": "abc",
-  "role": 1
+  "password": "abc"
 }
 
 ###
@@ -89,4 +88,13 @@ Content-Type: application/json
 
 {
   "room_id": 2
+}
+
+
+###
+POST http://127.0.0.1:8000/user/get_id_by_name
+Content-Type: application/json
+
+{
+  "name": "a"
 }

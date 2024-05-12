@@ -20,6 +20,10 @@ def calculate_cost(start_time, end_time, temperature, fan_speed, mode):
     fan_speed: "低" "中" "高" 依次乘上1.0/1.2/1.5
     mode: "制冷" "制热" 依次乘1.0/1.2
     """
+    # convert string to lower case
+    fan_speed = fan_speed.lower()
+    mode = mode.lower()
+
     start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
     end_time = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
     time_diff = end_time - start_time

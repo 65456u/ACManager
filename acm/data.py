@@ -76,7 +76,10 @@ class UserRegisterRequest(BaseModel):
     name: str
     phone: str
     password: str
-    role: int
+
+
+class GetUserIdRequest(BaseModel):
+    name: str
 
 
 class UserRegisterResponse(BaseModel):
@@ -84,8 +87,9 @@ class UserRegisterResponse(BaseModel):
 
 
 class UserLoginResponse(BaseModel):
-    role: int
+    status: int
     room_id: int
+    user_id: int
 
 
 class UserLoginRequest(BaseModel):
