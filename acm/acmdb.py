@@ -2,7 +2,7 @@ import sqlite3
 
 import bcrypt
 
-from .data import Settings, Invoice
+from .data import Settings, Invoice, ReportItem
 from .sql_queries import *
 from .utils import calculate_cost
 from .values import invalid_ac_setting
@@ -36,16 +36,20 @@ class ACMDatabase:
             return None
 
     def login(self, username, password):
-        query = "SELECT id, password, salt FROM users WHERE username = ?"
+        query = "SELECT id, password, salt , role FROM users WHERE username = ?"
         values = (username,)
         self.c.execute(query, values)
         user = self.c.fetchone()
         if user is None:
-            return None
-        user_id, hashed_password, salt = user
+            return 0, 0
+        user_id, hashed_password, salt, role = user
         if bcrypt.checkpw(password.encode('utf-8'), hashed_password.encode('utf-8')):
             return True
-        return False
+        # get room_id from rooms
+        query = "SELECT id FROM rooms WHERE user_id = ?"
+        self.c.execute(query, (user_id,))
+        room_id = self.c.fetchone()
+        return role, room_id
 
     def checkin(self, user_id):
         # find a room that isn't busy
@@ -84,7 +88,7 @@ class ACMDatabase:
             if start_time >= in_time:
                 total_cost += cost
         # get room's current status
-        query = "SELECT id, ac_on, start_time,temperature,fan_speed,mode, FROM rooms WHERE user_id = ?"
+        query = "SELECT id, ac_on, start_time,temperature,fan_speed,mode FROM rooms WHERE user_id = ?"
         self.c.execute(query, values)
         room = self.c.fetchone()
         if room is None:
@@ -206,29 +210,38 @@ class ACMDatabase:
         self.conn.commit()
         return 0, settings
 
-    # 查看空调状态
-    # def check_status(self, room_id):
-    #     query = r"""
-    #     SELECT * FROM ac_status WHERE room_id = ?
-    #     """
-    #     self.c.execute(query, (room_id,))
-    #     return self.c.fetchall()
+    def check_status(self, room_id):
+        query = r"""SELECT busy, ac_on, user_id, start_time, temperature,fan_speed, mode FROM rooms WHERE id = ?"""
+        self.c.execute(query, (room_id,))
+        room = self.c.fetchone()
+        if room is None:
+            return None
+        busy, ac_on, user_id, start_time, temperature, fan_speed, mode = room
+        settings = Settings(temperature = temperature, fan_speed = fan_speed, mode = mode)
+        return busy, ac_on, user_id, start_time, settings
 
     # 查询统计报表，统计房间的使用详单
     def generate_report(self, room_id):
-        # 查询房间的空调使用记录，并计算总消费
-        query = r"""
-        SELECT SUM(cost) FROM ac_usage_record WHERE room_id = ?
-        """
-        self.c.execute(query, (room_id,))
-        total_cost = self.c.fetchone()[0]
+        # # 查询房间的空调使用记录，并计算总消费
+        # query = r"""
+        # SELECT SUM(cost) FROM ac_usage_record WHERE room_id = ?
+        # """
+        # self.c.execute(query, (room_id,))
+        # total_cost = self.c.fetchone()[0]
         # 查询房间的空调使用记录
         query = r"""
         SELECT * FROM ac_usage_record WHERE room_id = ?
         """
         self.c.execute(query, (room_id,))
-        report = self.c.fetchall()
-        return total_cost, report
+        usage_records = self.c.fetchall()
+        report_items = []
+        for record in usage_records:
+            user_id, room_id, start_time, end_time, temperature, fan_speed, mode, cost = record
+            settings = Settings(temperature = temperature, fan_speed = fan_speed, mode = mode)
+            report_item = ReportItem(room_id = room_id, user_id = user_id, start_time = start_time, end_time = end_time,
+                                     cost = cost, settings = settings)
+            report_items.append(report_item)
+        return report_items
 
     # 提供消费账单和详单
     def generate_bill(self, user_id):

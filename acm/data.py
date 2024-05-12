@@ -27,7 +27,10 @@ class Invoice(BaseModel):
 
 class ReportItem(BaseModel):
     room_id: int
-    status: int
+    user_id: str
+    start_time: str
+    end_time: str
+    cost: float
     settings: Settings
 
 

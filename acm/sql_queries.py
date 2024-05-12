@@ -4,9 +4,11 @@ create_user_table_query = r"""
         username TEXT,
         password TEXT,
         phone TEXT,
-        salt TEXT
+        salt TEXT,
+        role INTEGER
     );
     """
+# 1 for customer, 2 for staff, 3 for administrator
 create_room_table_query = r"""
     CREATE TABLE IF NOT EXISTS rooms (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
