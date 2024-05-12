@@ -6,6 +6,7 @@ from acm.data import *
 
 app = FastAPI()
 manager = Manager()
+acm_db = ACMDatabase()
 
 
 @app.get("/")
@@ -24,21 +25,22 @@ async def register_user(user_request: UserRegisterRequest):
     # 返回包含用户ID的响应
     # user_id = "123456789"  # 替换为实际的用户ID生成逻辑
     # return {"user_id": user_id}
-    acm_db = ACMDatabase()  # 创建 ACMDatabase 类的实例
+    # 创建 ACMDatabase 类的实例
     # 调用 register_user 方法
     user_id = acm_db.register_user(user_request.username, user_request.phone, user_request.password)
     if user_id is not None:
-        return {"message": "User registered successfully", "user_id": user_id}
+        return {"user_id": user_id}
     else:
-        return {"message": "Failed to register user"}
+        return {"user_id": -1}
+
 
 @app.post("/checkin", response_model = CheckInResponse)
 def check_in(check_in_request: CheckInRequest):
     # 将签到逻辑放在这里，包括根据用户ID获取房间ID等操作
     # 返回包含房间ID的响应
-    #room_id = 1  # 替换为实际的房间ID生成逻辑
-    #return {"room_id": room_id}
-    acm_db = ACMDatabase()  # 创建 ACMDatabase 类的实例
+    # room_id = 1  # 替换为实际的房间ID生成逻辑
+    # return {"room_id": room_id}
+    # 创建 ACMDatabase 类的实例
     # 调用 checkin 方法
     room_id = acm_db.checkin(check_in_request.user_id)
     if room_id == -1:
@@ -58,10 +60,11 @@ def checkout(checkout_request: CheckoutRequest):
     #     Invoice(room_id = "789012", start_time = "2022-01-01 13:00:00", end_time = "2022-01-01 15:00:00",
     #             settings = Settings(temperature = 22, fan_speed = "Low", mode = "Heat"), cost = 50.0)
     # ]  # 替换为实际的详单生成逻辑
-    acm_db = ACMDatabase()
+
     # 调用 checkout 方法
     cost, invoices = acm_db.checkout(checkout_request.user_id)
     return {"cost": cost, "invoices": invoices}
+
 
 @app.post("/ac/on", response_model = ACSwitchResponse)
 def turn_on_ac(ac_on_request: RoomRequest):
@@ -71,19 +74,13 @@ def turn_on_ac(ac_on_request: RoomRequest):
     # status = True  # 替换为实际的开启空调逻辑
     # settings = Settings(temperature = 25, fan_speed = "High", mode = "Cool")  # 替换为实际的空调参数
     # return {"status": status, "settings": settings}
-    room_id = RoomRequest.room_id
+    room_id = ac_on_request.room_id
     # 创建 ACMDatabase 类的实例
-    acm_db = ACMDatabase()
-    # 调用 turn_on_ac 方法
-    status = acm_db.turn_on_ac(room_id)
-    # 根据返回的状态构建响应
-    if status == -1:
-        return {"status": -1, "message": "Room not found or not available"}
-    elif status == -2:
-        return {"status": -2, "message": "AC is already turned on in this room"}
-    else:
-        return {"status": 0, "message": "AC turned on successfully"}
 
+    # 调用 turn_on_ac 方法
+    status, settings = acm_db.turn_on_ac(room_id)
+    # 根据返回的状态构建响应
+    return {"status": status, "settings": settings.dict()}
 
 
 @app.post("/ac/off", response_model = ACSwitchResponse)
@@ -95,19 +92,11 @@ def turn_off_ac(ac_off_request: RoomRequest):
     # settings = Settings(temperature = 25, fan_speed = "High", mode = "Cool")
     # return {"status": status, "settings": settings}
     # 解析请求体数据
-    room_id = RoomRequest.room_id
-    # 创建 ACMDatabase 类的实例
-    acm_db = ACMDatabase()
+    room_id = ac_off_request.room_id
     # 调用 turn_off_ac 方法
     status, settings = acm_db.turn_off_ac(room_id)
     # 根据返回的状态构建响应
-    if status == -1:
-        return {"status": -1, "message": "Room not found or not available", "settings": settings.dict()}
-    elif status == -2:
-        return {"status": -2, "message": "AC is already turned off in this room", "settings": settings.dict()}
-    else:
-        return {"status": 0, "message": "AC turned off successfully", "settings": settings.dict()}
-
+    return {"status": status, "settings": settings.dict()}
 
 
 @app.post("/ac/settings", response_model = ACSwitchResponse)
@@ -118,47 +107,34 @@ def set_ac(ac_set_request: ACSettingRequest):
     # settings = ac_set_request.settings
     # status = True
     # return {"status": status, "settings": settings}
-    acm_db = ACMDatabase()
+
     # 从请求中获取房间ID和设置
     room_id = ac_set_request.room_id
     settings = ac_set_request.settings
     # 调用set_ac方法
     status, new_settings = acm_db.set_ac(room_id, settings)
-    # 根据返回值生成响应
-    if status == 0:
-        return {"status": "success", "settings": new_settings}
-    elif status == -1:
-        return {"status": "error", "message": "Room not found"}
-    elif status == -2:
-        return {"status": "error", "message": "AC is turned off"}
-    else:
-        return {"status": "error", "message": "Unknown error"}
-
+    # 根据返回的状态构建响应
+    return {"status": status, "settings": new_settings.dict()}
 
 
 @app.post("/ac/cost", response_model = RoomCostResponse)
-def get_cost(room_query_request:UserRegisterResponse):
-    acm_db = ACMDatabase()  # 创建 ACMDatabase 类的实例
+def get_cost(room_query_request: UserRegisterResponse):
+    # 创建 ACMDatabase 类的实例
     cost = acm_db.get_cost(room_query_request.user_id)  # 调用 get_cost 方法
     return {"cost": cost}
 
 
-
 @app.get("/ac/status", response_model = RoomStatusResponse)
 def get_ac_status(room_query_request: RoomRequest):
-    acm_db = ACMDatabase()  # 创建 ACMDatabase 类的实例
-    statuses = acm_db.check_status(room_query_request.room_id)  # 调用 fetch_all_ac_statuses 方法
-    return {"status": True, "settings": statuses}
-    #return {"status": True, "settings": Settings(temperature = 25, fan_speed = "High", mode = "Cool")}
+    # 创建 ACMDatabase 类的实例
+    busy, ac_on, user_id, start_time, settings = acm_db.check_status(room_query_request.room_id)
+    # 这里假设 RoomStatusResponse 是你定义的空调状态数据模型
+    return {"busy": busy, "ac_on": ac_on, "user_id": user_id, "start_time": start_time, "settings": settings.dict()}
 
 
 @app.get("/ac/reports", response_model = List[ReportItem])
 def get_report_item(room_query_request: RoomRequest):
-    acm_db = ACMDatabase()  # 创建 ACMDatabase 类的实例
-    total_cost, report = acm_db.generate_report(room_query_request.room_id)  # 调用 generate_report 方法
-    # 这里假设 ReportItem 是你定义的报告项数据模型
-    return {"total_cost": total_cost, "report": report}
-    # return [
-    #     ReportItem(room_id = 1, status = 1, settings = Settings(temperature = 25, fan_speed = "High", mode = "Cool")),
-    #     ReportItem(room_id = 2, status = 0, settings = Settings(temperature = 25, fan_speed = "High", mode = "Cool"))
-    # ]
+    # 创建 ACMDatabase 类的实例
+    reports = acm_db.generate_report(room_query_request.room_id)
+    # 这里假设 ReportItem 是你定义的报表数据模型
+    return reports

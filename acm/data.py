@@ -66,8 +66,10 @@ class RoomCostResponse(BaseModel):
 
 
 class RoomStatusResponse(BaseModel):
-    status: bool
+    busy: bool
+    ac_on: bool
     settings: Settings
+    start_time: str
 
 
 class UserRegisterRequest(BaseModel):

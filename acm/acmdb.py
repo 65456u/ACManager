@@ -5,7 +5,7 @@ import bcrypt
 from .data import Settings, Invoice, ReportItem
 from .sql_queries import *
 from .utils import calculate_cost
-from .values import invalid_ac_setting
+from .values import invalid_ac_setting, default_ac_setting
 
 
 class ACMDatabase:
@@ -18,14 +18,11 @@ class ACMDatabase:
     def register_user(self, username, phone, password):
         # Generate a new salt
         salt = bcrypt.gensalt()
-
         # Hash the password with the generated salt
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
-
         # Insert user into the database and get the user id
         insert_query = "INSERT INTO users (username, password, salt, phone) VALUES (?, ?, ?, ?)"
         values = (username, hashed_password.decode('utf-8'), salt.decode('utf-8'), phone)
-
         try:
             self.c.execute(insert_query, values)
             user_id = self.c.lastrowid
@@ -53,7 +50,7 @@ class ACMDatabase:
 
     def checkin(self, user_id):
         # find a room that isn't busy
-        query = "SELECT id, ac_on,temperature,fan_speed,mode FROM rooms WHERE busy = 0"
+        query = "SELECT id, ac_on, temperature, fan_speed, mode FROM rooms WHERE busy = 0"
         self.c.execute(query)
         room = self.c.fetchone()
         if room is None:
@@ -65,9 +62,16 @@ class ACMDatabase:
         self.c.execute(get_time_query)
         start_time = self.c.fetchone()[0]
         # update the room
-        update_room_query = "UPDATE rooms SET busy = ?, user_id = ?, start_time = ?, temperature = ?, fan_speed = ?, mode = ? WHERE id = ?"
+        update_room_query = r"""
+        UPDATE rooms
+        SET busy = ?, user_id = ?, start_time = ?, temperature = ?, fan_speed = ?, mode = ?
+        WHERE id = ?"""
         values = (busy, user_id, start_time, temperature, fan_speed, mode, room_id)
         self.c.execute(update_room_query, values)
+        # insert user record
+        insert_user_record_query = "INSERT INTO user_record (user_id, in_time) VALUES (?, ?)"
+        values = (user_id, start_time)
+        self.c.execute(insert_user_record_query, values)
         self.conn.commit()
         return room_id
 
@@ -88,7 +92,7 @@ class ACMDatabase:
             if start_time >= in_time:
                 total_cost += cost
         # get room's current status
-        query = "SELECT id, ac_on, start_time,temperature,fan_speed,mode FROM rooms WHERE user_id = ?"
+        query = "SELECT id, ac_on, start_time, temperature, fan_speed, mode FROM rooms WHERE user_id = ?"
         self.c.execute(query, values)
         room = self.c.fetchone()
         if room is None:
@@ -98,7 +102,6 @@ class ACMDatabase:
         get_time_query = "SELECT datetime('now')"
         self.c.execute(get_time_query)
         end_time = self.c.fetchone()[0]
-        # calculate the cost
         cost = calculate_cost(start_time, end_time, temperature, fan_speed, mode)
         total_cost += cost
         return total_cost
@@ -121,26 +124,27 @@ class ACMDatabase:
         # get the last record
         start_time = self.c.fetchone()[0]
         # get records from ac_usage_record
-        get_records_query = "SELECT * FROM ac_usage_record WHERE user_id = ?"
-        self.c.execute(get_records_query, values)
-        records = self.c.fetchall()
-        invoices = []
-        total_cost = 0
-        for record in records:
-            user_id, room_id, start_time, end_time, temperature, fan_speed, mode, cost = record
-            total_cost += cost
-            settings = Settings(temperature = temperature, fan_speed = fan_speed, mode = mode)
-            invoices.append(
-                Invoice(room_id = room_id, start_time = start_time, end_time = end_time, settings = settings,
-                        cost = cost))
+        # get_records_query = "SELECT * FROM ac_usage_record WHERE user_id = ?"
+        # self.c.execute(get_records_query, values)
+        # records = self.c.fetchall()
+        # invoices = []
+        # total_cost = 0
+        # for record in records:
+        #     user_id, room_id, start_time, end_time, temperature, fan_speed, mode, cost = record
+        #     total_cost += cost
+        #     settings = Settings(temperature = temperature, fan_speed = fan_speed, mode = mode)
+        #     invoices.append(
+        #         Invoice(room_id = room_id, start_time = start_time, end_time = end_time, settings = settings,
+        #                 cost = cost))
         # delete user record
+        total_cost, invoices = self.generate_bill(user_id)
         delete_user_record_query = "DELETE FROM rooms WHERE user_id = ?"
         self.c.execute(delete_user_record_query, values)
         return total_cost, invoices
 
     def turn_on_ac(self, room_id):
         # check the room status
-        query = "SELECT busy, ac_on FROM rooms WHERE id = ?"
+        query = "SELECT busy, ac_on, temperature, fan_speed, mode FROM rooms WHERE id = ?"
         values = (room_id,)
         self.c.execute(query, values)
         room = self.c.fetchone()
@@ -149,6 +153,7 @@ class ACMDatabase:
         busy, ac_on, user_id, start_time, temperature, fan_speed, mode = room
         if ac_on == 1:
             return -2
+        settings = Settings(temperature = temperature, fan_speed = fan_speed, mode = mode)
         # get current time
         get_time_query = "SELECT datetime('now')"
         self.c.execute(get_time_query)
@@ -158,7 +163,7 @@ class ACMDatabase:
         values = (room_id,)
         self.c.execute(update_room_query, values)
         self.conn.commit()
-        return 0
+        return 0, settings
 
     def turn_off_ac(self, room_id):
         settings = invalid_ac_setting
@@ -229,9 +234,7 @@ class ACMDatabase:
         # self.c.execute(query, (room_id,))
         # total_cost = self.c.fetchone()[0]
         # 查询房间的空调使用记录
-        query = r"""
-        SELECT * FROM ac_usage_record WHERE room_id = ?
-        """
+        query = r"""SELECT * FROM ac_usage_record WHERE room_id = ?"""
         self.c.execute(query, (room_id,))
         usage_records = self.c.fetchall()
         report_items = []
@@ -246,39 +249,50 @@ class ACMDatabase:
     # 提供消费账单和详单
     def generate_bill(self, user_id):
         query = r"""
-        SELECT SUM(cost) FROM ac_usage_record WHERE user_id = ?
-        """
-        self.c.execute(query, (user_id,))
-        total_cost = self.c.fetchone()[0]
-        query = r"""
-        SELECT * FROM ac_usage_record WHERE user_id = ?
-        """
+        SELECT room_id, start_time, end_time, temperature, fan_speed, mode, cost
+        FROM ac_usage_record
+        WHERE user_id = ?"""
         self.c.execute(query, (user_id,))
         bill = self.c.fetchall()
-        return total_cost, bill
+        # get in time from user_record
+        query = "SELECT in_time FROM user_record WHERE user_id = ?"
+        values = (user_id,)
+        self.c.execute(query, values)
+        in_time = self.c.fetchone()[0]
+        # only return records after the user checkin time
+        invoices = []
+        total_cost = 0
+        for bill_item in bill:
+            room_id, start_time, end_time, temperature, fan_speed, mode, cost = bill_item
+            if start_time < in_time:
+                continue
+            settings = Settings(temperature = temperature, fan_speed = fan_speed, mode = mode)
+            invoice = Invoice(room_id = room_id, start_time = start_time, end_time = end_time, settings = settings,
+                              cost = cost)
+            invoices.append(invoice)
+            total_cost += cost
+        return total_cost, invoices
 
     # 插入用户信息
     def insert_user(self, username, password, phone):
-        insert_user_query = r"""
-        INSERT INTO users (username, password, phone) VALUES (?, ?, ?)
-        """
+        insert_user_query = r"""INSERT INTO users (username, password, phone) VALUES (?, ?, ?)"""
         self.c.execute(insert_user_query, (username, password, phone))
         self.conn.commit()
 
     # 插入房间信息
-    def insert_room(self, busy):
+    def insert_room(self, busy, ac_on, user_id, start_time, temperature, fan_speed, mode):
         insert_room_query = r"""
-        INSERT INTO rooms (busy) VALUES (?)
-        """
-        self.c.execute(insert_room_query, (busy,))
+        INSERT INTO rooms (busy, ac_on, user_id, start_time, temperature, fan_speed, mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?)"""
+        self.c.execute(insert_room_query, (busy, ac_on, user_id, start_time, temperature, fan_speed, mode))
         self.conn.commit()
 
     # 插入空调使用记录表
     def insert_ac_usage_record(self, user_id, room_id, start_time, end_time, temperature, fan_speed, mode, cost):
         insert_ac_usage_record_query = r"""
-        INSERT INTO ac_usage_record (user_id, room_id, start_time, end_time, temperature, fan_speed, mode, cost)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """
+        INSERT INTO ac_usage_record
+        (user_id, room_id, start_time, end_time, temperature, fan_speed, mode, cost)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)"""
         self.c.execute(insert_ac_usage_record_query,
                        (user_id, room_id, start_time, end_time, temperature, fan_speed, mode, cost))
         self.conn.commit()
@@ -323,3 +337,8 @@ class ACMDatabase:
         # self.c.execute(create_ac_status_table_query)
         self.c.execute(create_user_record_query)
         self.conn.commit()
+
+    def add_rooms(self, count):
+        for i in range(count):
+            self.insert_room(0, 0, -1, "", default_ac_setting.temperature, default_ac_setting.fan_speed,
+                             default_ac_setting.mode)

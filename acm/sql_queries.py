@@ -19,8 +19,7 @@ create_room_table_query = r"""
         temperature INTEGER,
         fan_speed TEXT,
         mode TEXT,
-        FOREIGN KEY(user_id) REFERENCES users(id)
-        
+        FOREIGN KEY(user_id) REFERENCES users(id)  
     );
     """
 create_ac_usage_record_table_query = r"""
