@@ -1,12 +1,10 @@
 from fastapi import FastAPI
 
-from acm import Manager
-from acm.acmdb import ACMDatabase
+from acm import Manager as ACManager
 from acm.data import *
 
 app = FastAPI()
-manager = Manager()
-acm_db = ACMDatabase()
+acm_db = ACManager()
 
 
 @app.get("/")
