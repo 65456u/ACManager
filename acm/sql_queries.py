@@ -3,7 +3,7 @@ create_user_table_query = r"""
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT,
         password TEXT,
-        phone TEXT,
+        phone TEXT UNIQUE,
         salt TEXT,
         role INTEGER
     );

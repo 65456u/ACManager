@@ -27,11 +27,20 @@ async def register_user(user_request: UserRegisterRequest):
     # return {"user_id": user_id}
     # 创建 ACMDatabase 类的实例
     # 调用 register_user 方法
-    user_id = acm_db.register_user(user_request.username, user_request.phone, user_request.password)
+    user_id = acm_db.register_user(user_request.name, user_request.phone, user_request.password, user_request.role)
     if user_id is not None:
         return {"user_id": user_id}
     else:
         return {"user_id": -1}
+
+
+@app.post("/user/login", response_model = UserLoginResponse)
+def login_user(user_request: UserLoginRequest):
+    role, room_id = acm_db.login(user_request.name, user_request.password)
+    if role == -1:
+        return {"role": -1, "room_id": -1}
+    else:
+        return {"role": role, "room_id": room_id}
 
 
 @app.post("/checkin", response_model = CheckInResponse)
@@ -117,7 +126,7 @@ def set_ac(ac_set_request: ACSettingRequest):
     return {"status": status, "settings": new_settings.dict()}
 
 
-@app.post("/ac/cost", response_model = RoomCostResponse)
+@app.get("/ac/cost", response_model = RoomCostResponse)
 def get_cost(room_query_request: UserRegisterResponse):
     # 创建 ACMDatabase 类的实例
     cost = acm_db.get_cost(room_query_request.user_id)  # 调用 get_cost 方法

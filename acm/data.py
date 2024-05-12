@@ -10,7 +10,7 @@ class Settings(BaseModel):
 
 
 class CheckInRequest(BaseModel):
-    user_id: str
+    user_id: int
 
 
 class CheckInResponse(BaseModel):
@@ -18,7 +18,7 @@ class CheckInResponse(BaseModel):
 
 
 class Invoice(BaseModel):
-    room_id: str
+    room_id: int
     start_time: str
     end_time: str
     settings: Settings
@@ -27,7 +27,7 @@ class Invoice(BaseModel):
 
 class ReportItem(BaseModel):
     room_id: int
-    user_id: str
+    user_id: int
     start_time: str
     end_time: str
     cost: float
@@ -39,7 +39,7 @@ class ReportResponse(BaseModel):
 
 
 class CheckoutRequest(BaseModel):
-    user_id: str
+    user_id: int
 
 
 class CheckoutResponse(BaseModel):
@@ -52,7 +52,7 @@ class RoomRequest(BaseModel):
 
 
 class ACSwitchResponse(BaseModel):
-    status: bool
+    status: int
     settings: Settings
 
 
@@ -66,8 +66,8 @@ class RoomCostResponse(BaseModel):
 
 
 class RoomStatusResponse(BaseModel):
-    busy: bool
-    ac_on: bool
+    busy: int
+    ac_on: int
     settings: Settings
     start_time: str
 
@@ -76,7 +76,18 @@ class UserRegisterRequest(BaseModel):
     name: str
     phone: str
     password: str
+    role: int
 
 
 class UserRegisterResponse(BaseModel):
-    user_id: str
+    user_id: int
+
+
+class UserLoginResponse(BaseModel):
+    role: int
+    room_id: int
+
+
+class UserLoginRequest(BaseModel):
+    name: str
+    password: str
